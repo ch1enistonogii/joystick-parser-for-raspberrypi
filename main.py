@@ -1,47 +1,37 @@
 import serial
 
-# Настройки UART
-UART_PORT = "/dev/serial0"  # Убедитесь, что используется правильный порт
-BAUD_RATE = 115200          # Скорость передачи данных джойстика
+# Настройка последовательного порта
+port = "/dev/serial0"
+baudrate = 115200
+ser = serial.Serial(port, baudrate, timeout=1)
 
-def process_data(raw_data):
-    """
-    Обработка данных, поступивших через UART.
-    """
+print(f"Открыт порт {port} с скоростью {baudrate}")
+
+buffer = b""  # Буфер для данных
+
+while True:
     try:
-        # Пытаемся декодировать данные как текст
-        decoded_data = raw_data.decode('utf-8')
-        print(f"Получено (текст): {decoded_data}")
-    except UnicodeDecodeError:
-        # Если декодирование не удалось, выводим как байты
-        print("Получено (байты):", " ".join(f"{byte:02x}" for byte in raw_data))
-        analyze_bytes(raw_data)
+        if ser.in_waiting > 0:
+            data = ser.read(ser.in_waiting)
+            buffer += data  # Добавляем данные в буфер
 
-def analyze_bytes(byte_data):
-    """
-    Анализ данных в формате байтов.
-    """
-    # Пример анализа данных
-    if len(byte_data) >= 3:
-        # Определение команды и значений
-        command = byte_data[0]
-        values = byte_data[1:]
-        print(f"Команда: {command:02x}, Значения: {[f'{v:02x}' for v in values]}")
-    else:
-        print("Недостаточно данных для анализа.")
+            # Декодируем текст для отображения (если это текст)
+            try:
+                text_data = data.decode('utf-8')
+                print(f"Получено (текст): {text_data}")
+            except UnicodeDecodeError:
+                print(f"Получено (байты): {data.hex()}")
 
-try:
-    # Инициализация последовательного порта
-    with serial.Serial(UART_PORT, BAUD_RATE, timeout=1) as ser:
-        print(f"Открыт порт {UART_PORT} с скоростью {BAUD_RATE}")
+            # Пытаемся обработать данные в буфере
+            while len(buffer) >= 3:  # Минимальная длина данных для анализа
+                command = buffer[0]  # Первый байт - команда
+                values = buffer[1:3]  # Следующие два байта - значения
 
-        while True:
-            if ser.in_waiting > 0:  # Проверяем, есть ли входящие данные
-                raw_data = ser.read(ser.in_waiting)  # Читаем все доступные данные
-                process_data(raw_data)
-            else:
-                pass  # Небольшая задержка не обязательна
-except serial.SerialException as e:
-    print(f"Ошибка последовательного порта: {e}")
-except KeyboardInterrupt:
-    print("Программа завершена пользователем.")
+                print(f"Команда: {command:02x}, Значения: {[f'{v:02x}' for v in values]}")
+                buffer = buffer[3:]  # Убираем обработанные данные из буфера
+
+    except KeyboardInterrupt:
+        print("Выход из программы.")
+        break
+    except Exception as e:
+        print(f"Ошибка: {e}")
